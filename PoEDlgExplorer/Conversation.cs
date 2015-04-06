@@ -22,13 +22,16 @@ namespace PoEDlgExplorer
 {
 	public class Conversation
 	{
+		public readonly string Tag;
+
 		private readonly IDictionary<int, FlowChartNode> _nodes;
 		private readonly IDictionary<int, StringTableEntry> _stringTable;
 
 		public int NodeCount { get { return _nodes.Count; } }
 
-		public Conversation(XElement xConversation, XElement xStringTable)
+		public Conversation(string tag, XElement xConversation, XElement xStringTable)
 		{
+			Tag = tag;
 			_stringTable = ParseStringTable(xStringTable);
 
 			_nodes = new Dictionary<int, FlowChartNode>();
@@ -47,6 +50,11 @@ namespace PoEDlgExplorer
 		public FlowChartNode GetNode(int nodeId)
 		{
 			return _nodes[nodeId];
+		}
+
+		public bool HasStringEntry(int nodeId)
+		{
+			return _stringTable.ContainsKey(nodeId);
 		}
 
 		public StringTableEntry GetStringEntry(int nodeId)

@@ -29,6 +29,7 @@ namespace PoEDlgExplorer
 			None,
 			PickLine,
 			Rewind,
+			ToggleAudio,
 			QuitProgram,
 		}
 
@@ -60,14 +61,6 @@ namespace PoEDlgExplorer
 						Console.SetCursorPosition(Console.CursorLeft - 1, Console.CursorTop);
 					}
 				}
-				else if (keyInfo.Key == ConsoleKey.Spacebar)
-				{
-					if (numDialogueLines == 1)
-					{
-						pickedLine = 1;
-						command = Command.PickLine;
-					}
-				}
 				else if (keyInfo.Key == ConsoleKey.Enter)
 				{
 					if (numDialogueLines == 1)
@@ -80,9 +73,7 @@ namespace PoEDlgExplorer
 					}
 					else
 					{
-						if (numDialogueLines == 0)
-							Console.WriteLine("Hit BACKSPACE to rewind\n");
-						else
+						if (numDialogueLines > 0)
 							Console.WriteLine("Valid range: {0} .. {1}\n", 1, numDialogueLines);
 
 						Debug.Assert(accumulator == 0);
@@ -104,33 +95,35 @@ namespace PoEDlgExplorer
 							command = Command.PickLine;
 						}
 					}
-					else if (numDialogueLines == 0)
-					{
-						Console.WriteLine("Hit BACKSPACE to rewind\n");
-					}
+				}
+				else if (keyInfo.Key == ConsoleKey.Spacebar)
+				{
+					command = Command.ToggleAudio;
 				}
 			} while (command == Command.None);
 
 			return command;
 		}
 
-		private static Conversation LoadConversation(string filePath, string language)
+		private static Conversation LoadConversation(string conversationTag, string localization)
 		{
-			string localizedFilePath = filePath
-				.Replace(@"data\conversations\", @"data\localized\" + language + @"\text\conversations\")
-				.Replace(".conversation", ".stringtable");
+			FileInfo conversationFile = ResourceLocator.FindConversation(conversationTag);
+			if (conversationFile == null)
+				throw new ArgumentException("Conversation " + conversationTag + " file not found");
 
-			var conversationFile = new FileInfo(filePath);
-			var localizedFile = new FileInfo(localizedFilePath);
+			return LoadConversationByPath(conversationFile, localization);
+		}
 
-			if (conversationFile.Extension != ".conversation")
-				throw new ArgumentException("Not a conversation file: " + filePath);
-			if (!conversationFile.Exists)
-				throw new FileNotFoundException("File not found: " + conversationFile.FullName);
-			if (!localizedFile.Exists)
-				throw new FileNotFoundException("File not found: " + localizedFile.FullName);
+		private static Conversation LoadConversationByPath(FileInfo conversationFile, string localization)
+		{
+			string tag = Path.GetFileNameWithoutExtension(conversationFile.Name);
 
-			return new Conversation(XElement.Load(filePath), XElement.Load(localizedFilePath));
+			FileInfo stringTableFile = ResourceLocator.FindStringTableByPath(conversationFile, localization);
+			if (stringTableFile == null)
+				throw new ArgumentException("String table file not found for conversation " + tag + " (" + localization + ")");
+
+			return new Conversation(tag,
+				XElement.Load(conversationFile.FullName), XElement.Load(stringTableFile.FullName));
 		}
 
 		private static void PrintNodeInfo(FlowChartNode node, int indendation)
@@ -146,67 +139,83 @@ namespace PoEDlgExplorer
 				Console.WriteLine("{0}  on update : {1}", space, script);
 		}
 
-		private static void PrintNode(Conversation conversation, int nodeId)
+		private static void LoadNode(Conversation conversation, int nodeId, bool playAudio)
 		{
 			FlowChartNode node = conversation.GetNode(nodeId);
+			Console.WriteLine("[node-{0:00}]", node.Id);
 
-			Console.WriteLine("[node-{0:00}]\n\n", node.Id);
-
-			for (int i = 0; i < node.LinkCount; i++)
+			StringTableEntry text;
+			if (conversation.HasStringEntry(nodeId))
 			{
-				DialogueLink link = node.GetLink(i);
-				StringTableEntry se = conversation.GetStringEntry(link.TargetId);
+				FileInfo audioFile = ResourceLocator.FindVocalization(conversation.Tag, nodeId);
+				if (audioFile != null)
+				{
+					Console.WriteLine("[vocalized]");
+					if (playAudio)
+						AudioServer.Play(audioFile);
+				}
 
-				Console.Write("({0}) {1} ", i + 1, link.GetBrief());
-
-				PrintNodeInfo(conversation.GetNode(link.TargetId), 0);
+				Console.WriteLine();
+				text = conversation.GetStringEntry(node.Id);
 				Console.ForegroundColor = ConsoleColor.White;
-				Console.WriteLine("{0}\n\n", se.Format());
+				Console.WriteLine("{0}", text.Format());
 				Console.ForegroundColor = ConsoleColor.Gray;
+			}
+			Console.WriteLine("\n\n");
+
+			if (node.LinkCount == 0)
+			{
+				Console.WriteLine("(End. Hit BACKSPACE to rewind)");
+			}
+			else
+			{
+				for (int i = 0; i < node.LinkCount; i++)
+				{
+					DialogueLink link = node.GetLink(i);
+					text = conversation.GetStringEntry(link.TargetId);
+
+					Console.Write("({0}) {1} ", i + 1, link.GetBrief());
+
+					PrintNodeInfo(conversation.GetNode(link.TargetId), 0);
+
+					Console.ForegroundColor = ConsoleColor.White;
+					Console.WriteLine("{0}\n\n", text.Format());
+					Console.ForegroundColor = ConsoleColor.Gray;
+				}
 			}
 		}
 
 		// ReSharper disable once UnusedMember.Local
-		private static void ValidateAllConversations(string rootPath)
+		private static void ValidateAllConversations()
 		{
-			int fileCount = 0;
+			IList<FileInfo> conversationFiles = ResourceLocator.FindAllConversations();
 			int missingFileCount = 0;
 			int unparsableFileCount = 0;
 
-			Action<DirectoryInfo> traverse = null;
-			traverse = dirInfo =>
+			foreach (var conversationFile in conversationFiles)
 			{
-				foreach (var file in dirInfo.GetFiles("*.conversation"))
+				try
 				{
-					fileCount++;
-					try
-					{
-						LoadConversation(file.FullName, "en");
-					}
-					catch (FileNotFoundException)
-					{
-						// ignore
-						missingFileCount++;
-					}
-					catch (IOException e)
-					{
-						Console.Error.WriteLine("I/O error: {0}", e.Message);
-						unparsableFileCount++;
-					}
-					catch (ArgumentException e)
-					{
-						Console.Error.WriteLine("Couldn't parse {0}. Error: {1}", file.Name, e.Message);
-						unparsableFileCount++;
-					}
+					LoadConversationByPath(conversationFile, "en");
 				}
+				catch (FileNotFoundException)
+				{
+					// ignore
+					missingFileCount++;
+				}
+				catch (IOException e)
+				{
+					Console.Error.WriteLine("I/O error: {0}", e.Message);
+					unparsableFileCount++;
+				}
+				catch (ArgumentException e)
+				{
+					Console.Error.WriteLine("Error: {0}", e.Message);
+					unparsableFileCount++;
+				}
+			}
 
-				foreach (var subdir in dirInfo.GetDirectories())
-					traverse(subdir);
-			};
-
-			traverse(new DirectoryInfo(rootPath));
-
-			Console.WriteLine("total conversation files: {0}", fileCount);
+			Console.WriteLine("total conversation files: {0}", conversationFiles.Count);
 			Console.WriteLine("files without stringtable: {0}", missingFileCount);
 			Console.WriteLine("unparsable files: {0}", unparsableFileCount);
 			Console.WriteLine();
@@ -216,10 +225,29 @@ namespace PoEDlgExplorer
 		{
 			Settings.Load();
 
-			// string poePath = Settings.GetString("poe_path");
-			// ValidateAllConversations(poePath + @"PillarsOfEternity_Data\data\conversations\");
-
 			if (args.Length == 0)
+				args = new string[]
+				{
+					@"c:\Games\Pillars of Eternity\PillarsOfEternity_Data\data\conversations\companions\companion_cv_durance_v2.conversation"
+				};
+
+			try
+			{
+				if (args.Length > 0)
+					ResourceLocator.Initialize(args[0]);
+				else
+					ResourceLocator.Initialize(Settings.GetString("poe_path"));
+			}
+			catch (Exception e)
+			{
+				Console.Error.WriteLine("Error: " + e);
+				Console.ReadKey(true);
+				return;
+			}
+
+			// ValidateAllConversations();
+
+			if (args.Length == 0 || !args[0].EndsWith(".conversation"))
 			{
 				Console.WriteLine("Usage: PoEDlgExplorer.exe <conversation path>");
 				Console.ReadKey(true);
@@ -231,6 +259,7 @@ namespace PoEDlgExplorer
 			Console.WriteLine("0..9:      select a dialogue line");
 			Console.WriteLine("ENTER:     commit when there are 10+ options");
 			Console.WriteLine("BACKSPACE: rewind");
+			Console.WriteLine("SPACE:     toggle audio");
 			Console.WriteLine("ESC:       quit");
 			Console.WriteLine("\n");
 
@@ -238,46 +267,66 @@ namespace PoEDlgExplorer
 			try
 			{
 				string localization = Settings.GetString("localization");
-				conversation = LoadConversation(args[0], localization);
+				conversation = LoadConversationByPath(new FileInfo(args[0]), localization);
 			}
 			catch (Exception e)
 			{
-				Console.Error.WriteLine("Parsing error: " + e);
+				Console.Error.WriteLine("Error: " + e);
 				Console.ReadKey(true);
 				return;
 			}
 
+			bool playAudio = Settings.GetBool("play_audio");
+
 			var nodeStack = new Stack<int>();
 			nodeStack.Push(0);
+			LoadNode(conversation, nodeStack.Peek(), playAudio);
 
-			bool quit = false;
+			Command command;
 			do
 			{
-				PrintNode(conversation, nodeStack.Peek());
-
 				FlowChartNode node = conversation.GetNode(nodeStack.Peek());
 				int pickedLine;
-				Command command = ReadInput(node.LinkCount, out pickedLine);
+				command = ReadInput(node.LinkCount, out pickedLine);
 
 				switch (command)
 				{
 					case Command.PickLine:
 						DialogueLink link = node.GetLink(pickedLine - 1);
 						nodeStack.Push(link.TargetId);
+						AudioServer.Stop();
+						Console.Clear();
+						LoadNode(conversation, nodeStack.Peek(), playAudio);
 						break;
 					case Command.Rewind:
 						if (nodeStack.Count > 1)
+						{
 							nodeStack.Pop();
+							AudioServer.Stop();
+							Console.Clear();
+							LoadNode(conversation, nodeStack.Peek(), false);
+						}
 						break;
 					case Command.QuitProgram:
-						quit = true;
+						break;
+					case Command.ToggleAudio:
+						if (playAudio)
+						{
+							playAudio = false;
+							AudioServer.Stop();
+						}
+						else
+						{
+							playAudio = true;
+							FileInfo audioFile = ResourceLocator.FindVocalization(conversation.Tag, node.Id);
+							if (audioFile != null)
+								AudioServer.Play(audioFile);
+						}
 						break;
 					default:
 						throw new ArgumentOutOfRangeException();
 				}
-
-				Console.Clear();
-			} while (!quit);
+			} while (command != Command.QuitProgram);
 		}
 	}
 }

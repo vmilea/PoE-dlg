@@ -5,6 +5,7 @@ This is a simple command line tool to explore [Pillars of Eternity](http://etern
 * quick navigation through conversation nodes
 * pretty-print trigger conditions
 * pretty-print script calls
+* audio playback
 
 ### How-to
 Select any _*.conversation_ file from game path and _Open With..._ executable.

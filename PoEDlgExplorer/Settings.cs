@@ -46,5 +46,10 @@ namespace PoEDlgExplorer
 		{
 			return int.Parse(Entries[key]);
 		}
+
+		public static bool GetBool(string key)
+		{
+			return bool.Parse(Entries[key]);
+		}
 	}
 }
