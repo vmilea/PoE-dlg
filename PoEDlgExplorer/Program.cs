@@ -225,11 +225,11 @@ namespace PoEDlgExplorer
 		{
 			Settings.Load();
 
-			if (args.Length == 0)
-				args = new string[]
-				{
-					@"c:\Games\Pillars of Eternity\PillarsOfEternity_Data\data\conversations\companions\companion_cv_durance_v2.conversation"
-				};
+			//if (args.Length == 0)
+			//	args = new string[]
+			//	{
+			//		@"c:\Games\Pillars of Eternity\PillarsOfEternity_Data\data\conversations\companions\companion_cv_durance_v2.conversation"
+			//	};
 
 			try
 			{
