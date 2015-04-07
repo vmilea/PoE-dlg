@@ -144,17 +144,13 @@ namespace PoEDlgExplorer
 			FlowChartNode node = conversation.GetNode(nodeId);
 			Console.WriteLine("[node-{0:00}]", node.Id);
 
+			FileInfo audioFile = ResourceLocator.FindVocalization(conversation.Tag, nodeId);
+			if (audioFile != null)
+				Console.WriteLine("[vocalized]");
+
 			StringTableEntry text;
 			if (conversation.HasStringEntry(nodeId))
 			{
-				FileInfo audioFile = ResourceLocator.FindVocalization(conversation.Tag, nodeId);
-				if (audioFile != null)
-				{
-					Console.WriteLine("[vocalized]");
-					if (playAudio)
-						AudioServer.Play(audioFile);
-				}
-
 				Console.WriteLine();
 				text = conversation.GetStringEntry(node.Id);
 				Console.ForegroundColor = ConsoleColor.White;
@@ -183,6 +179,9 @@ namespace PoEDlgExplorer
 					Console.ForegroundColor = ConsoleColor.Gray;
 				}
 			}
+
+			if ((audioFile != null) && playAudio)
+				AudioServer.Play(audioFile);
 		}
 
 		// ReSharper disable once UnusedMember.Local
@@ -327,6 +326,8 @@ namespace PoEDlgExplorer
 						throw new ArgumentOutOfRangeException();
 				}
 			} while (command != Command.QuitProgram);
+
+			AudioServer.Kill();
 		}
 	}
 }

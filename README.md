@@ -1,5 +1,5 @@
 # Pillars of Eternity dialogue explorer
-This is a simple command line tool to explore [Pillars of Eternity](http://eternity.obsidian.net) conversation files.
+This is a simple command line tool to explore conversation files from the game [Pillars of Eternity](http://eternity.obsidian.net) by Obsidian Entertainment.
 
 ### Features
 * quick navigation through conversation nodes
