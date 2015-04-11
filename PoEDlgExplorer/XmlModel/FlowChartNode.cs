@@ -47,11 +47,7 @@ namespace PoEDlgExplorer.XmlModel
 		{
 			var sb = new StringBuilder();
 
-			string condition = Conditionals.Format();
-			if (condition.Length > 0)
-				sb.Append("(").Append(condition).Append(") ");
-
-			sb.Append(string.Format("-> [ node-{0:00} ", NodeID));
+			sb.Append(string.Format("[ node-{0:00} ", NodeID));
 			ExtendBrief(sb);
 			sb.Append("]");
 

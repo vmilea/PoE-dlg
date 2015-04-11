@@ -44,12 +44,27 @@ namespace PoEDlgExplorer.XmlModel
 
 			switch (FunctionName)
 			{
+				case "SetGlobalValue":
+					if (Parameters.Count != 2)
+						throw new ArgumentException("SetGlobalValue takes 2 arguments");
+
+					result = Parameters[0] + " = " + Parameters[1];
+					break;
+
+				case "IncrementGlobalValue":
+					if (Parameters.Count != 2)
+						throw new ArgumentException("IncrementGlobalValue takes 2 arguments");
+
+					result = Parameters[0] + " += " + Parameters[1];
+					break;
+
 				case "DispositionAddPoints":
 					if (Parameters.Count != 2)
 						throw new ArgumentException("DispositionAddPoints takes 2 arguments");
 
 					result = Parameters[0] + " += " + Parameters[1];
 					break;
+
 				default:
 					result = FormatFunction();
 					break;
@@ -132,8 +147,12 @@ namespace PoEDlgExplorer.XmlModel
 			}
 
 			if (negate && !negateHandled)
-				result = "!(" + result + ")";
-
+			{
+				if (result.Contains("="))
+					result = "!(" + result + ")";
+				else
+					result = "!" + result;
+			}
 			return result;
 		}
 

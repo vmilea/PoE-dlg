@@ -69,16 +69,23 @@ namespace PoEDlgExplorer.XmlModel
 
 		protected override void ExtendBrief(StringBuilder sb)
 		{
+			if (IsQuestionNode)
+				sb.Append("QuestionNode ");
+
 			if (!(this is TalkNode))
 				sb.Append(GetType().Name).Append(" ");
 
 			if (DisplayType != DisplayType.Conversation)
 				sb.Append(DisplayType).Append(" ");
 
+			if (PlayType != PlayType.Normal)
+				sb.Append(PlayType).Append(" ");
+
 			if (Persistence != PersistenceType.None)
 				sb.Append(Persistence).Append(" ");
 
-			sb.Append("]");
+			if (NotSkippable)
+				sb.Append("NotSkippable ");
 		}
 	}
 
@@ -112,8 +119,8 @@ namespace PoEDlgExplorer.XmlModel
 		{
 			base.ExtendBrief(sb);
 
-			sb.Append("trigger node-").Append(StartNodeID)
-				.Append(" from ").Append(ConversationFilename).Append(" ");
+			sb.Append("node-").Append(StartNodeID)
+				.Append("-").Append(ConversationFilename).Append(" ");
 		}
 	}
 

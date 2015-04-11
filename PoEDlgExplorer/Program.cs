@@ -29,6 +29,7 @@ namespace PoEDlgExplorer
 			None,
 			PickLine,
 			Rewind,
+			Confirm,
 			ToggleAudio,
 			QuitProgram,
 		}
@@ -75,6 +76,8 @@ namespace PoEDlgExplorer
 					{
 						if (numDialogueLines > 0)
 							Console.WriteLine("Valid range: {0} .. {1}\n", 1, numDialogueLines);
+						else
+							command = Command.Confirm;
 
 						Debug.Assert(accumulator == 0);
 					}
@@ -120,7 +123,7 @@ namespace PoEDlgExplorer
 
 			FileInfo stringTableFile = ResourceLocator.FindStringTableByPath(conversationFile, localization);
 			if (stringTableFile == null)
-				throw new ArgumentException("String table file not found for conversation " + tag + " (" + localization + ")");
+				throw new FileNotFoundException("String table file not found for conversation " + tag + " (" + localization + ")");
 
 			var conversationData = Xml.Deserialize<ConversationData>(conversationFile.FullName);
 			var stringTable = Xml.Deserialize<StringTable>(stringTableFile.FullName);
@@ -128,64 +131,79 @@ namespace PoEDlgExplorer
 			return new Conversation(tag, conversationData, stringTable);
 		}
 
-		private static void PrintNodeInfo(FlowChartNode node, int indendation)
+		private static void PrintNode(ConversationLink conversationLink, bool playAudio)
 		{
-			var space = new string(' ', indendation);
-
-			Console.WriteLine("{0}{1}", space, node.GetBrief());
-			foreach (var script in node.OnEnterScripts)
-				Console.WriteLine("{0}  on enter  : {1}", space, script.Format());
-			foreach (var script in node.OnExitScripts)
-				Console.WriteLine("{0}  on exit   : {1}", space, script.Format());
-			foreach (var script in node.OnUpdateScripts)
-				Console.WriteLine("{0}  on update : {1}", space, script.Format());
+			PrintNode(conversationLink.Conversation, conversationLink.Link, playAudio);
 		}
 
-		private static void LoadNode(Conversation conversation, int nodeId, bool playAudio)
+		private static void PrintNode(Conversation conversation, FlowChartLink parentLink, bool playAudio)
 		{
-			FlowChartNode node = conversation.FindNode(nodeId);
-			Console.WriteLine("[node-{0:00}]", node.NodeID);
+			FlowChartNode node = conversation.Nodes[parentLink.ToNodeID];
+			var dialogueNode = node as DialogueNode;
+			bool keepParentBrief = (parentLink.PointsToGhost && dialogueNode != null && dialogueNode.IsQuestionNode);
+			FlowChartNode briefNode = (keepParentBrief ? conversation.Nodes[parentLink.FromNodeID] : node);
 
-			FileInfo audioFile = ResourceLocator.FindVocalization(conversation.Tag, nodeId);
+			Console.WriteLine("{0}", briefNode.GetBrief());
+
+			FileInfo audioFile = ResourceLocator.FindVocalization(conversation.Tag, briefNode.NodeID);
 			if (audioFile != null)
-				Console.WriteLine("[audio]");
+				Console.Write("[audio] ");
 
-			StringTable.Entry text = conversation.FindText(node.NodeID);
+			StringTable.Entry text = conversation.FindText(briefNode.NodeID);
 			if (text != null)
 			{
 				Console.ForegroundColor = ConsoleColor.White;
-				Console.WriteLine("\n{0}", text.Format());
+				Console.WriteLine("{0}", text.Format());
 				Console.ForegroundColor = ConsoleColor.Gray;
 			}
 			Console.WriteLine("\n\n");
 
 			if (node.Links.Count == 0)
 			{
-				Console.WriteLine("(End. Hit BACKSPACE to rewind)");
+				if (node is TriggerConversationNode)
+					Console.WriteLine("(End. Hit BACKSPACE to rewind or ENTER to load target conversation)");
+				else
+					Console.WriteLine("(End. Hit BACKSPACE to rewind)");
 			}
 			else
 			{
 				for (int i = 0; i < node.Links.Count; i++)
 				{
 					FlowChartLink link = node.Links[i];
+					FlowChartNode targetNode = conversation.FindNode(link.ToNodeID);
 					text = conversation.FindText(link.ToNodeID);
 
-					Console.Write("({0}) {1} ", i + 1, link.GetBrief());
+					Console.WriteLine("({0}) {1} -> {2}", i + 1, link.GetBrief(), targetNode.GetBrief());
 
-					if (ResourceLocator.FindVocalization(conversation.Tag, link.ToNodeID) != null)
-						Console.Write("[audio] ");
-
-					PrintNodeInfo(conversation.FindNode(link.ToNodeID), 0);
+					string condition = targetNode.Conditionals.Format();
+					if (condition.Length > 0)
+						Console.WriteLine("  if : {0}", condition);
+					foreach (var script in targetNode.OnEnterScripts)
+						Console.WriteLine("  on enter  : {0}", script.Format());
+					foreach (var script in targetNode.OnExitScripts)
+						Console.WriteLine("  on exit   : {0}", script.Format());
+					foreach (var script in targetNode.OnUpdateScripts)
+						Console.WriteLine("  on update : {0}", script.Format());
 
 					if (!link.PointsToGhost)
 						Console.ForegroundColor = ConsoleColor.White;
-					Console.WriteLine("{0}\n\n", (node.Links.Count == 1 ? "[continue]" : text.Format()));
+					if (node.Links.Count == 1)
+					{
+						Console.WriteLine("[continue]");
+					}
+					else
+					{
+						if (ResourceLocator.FindVocalization(conversation.Tag, link.ToNodeID) != null)
+							Console.Write("[audio] ");
+						Console.WriteLine(text.Format());
+					}
 					if (!link.PointsToGhost)
 						Console.ForegroundColor = ConsoleColor.Gray;
+					Console.WriteLine("\n");
 				}
 			}
 
-			if ((audioFile != null) && playAudio)
+			if ((audioFile != null) && playAudio && (briefNode == node))
 				AudioServer.Play(audioFile);
 		}
 
@@ -223,6 +241,23 @@ namespace PoEDlgExplorer
 			Console.WriteLine("files without stringtable: {0}", missingFileCount);
 			Console.WriteLine("unparsable files: {0}", unparsableFileCount);
 			Console.WriteLine();
+		}
+
+		struct ConversationLink
+		{
+			public readonly Conversation Conversation;
+			public readonly FlowChartLink Link;
+
+			public ConversationLink(Conversation conversation, FlowChartLink link)
+			{
+				Conversation = conversation;
+				Link = link;
+			}
+
+			public ConversationLink(Conversation conversation, int fromNodeID, int toNodeID)
+				: this(conversation, new FlowChartLink() { FromNodeID = fromNodeID, ToNodeID = toNodeID })
+			{
+			}
 		}
 
 		static void Main(string[] args)
@@ -268,8 +303,7 @@ namespace PoEDlgExplorer
 			Conversation conversation;
 			try
 			{
-				string localization = Settings.Instance.Localization;
-				conversation = LoadConversationByPath(new FileInfo(args[0]), localization);
+				conversation = LoadConversationByPath(new FileInfo(args[0]), Settings.Instance.Localization);
 			}
 			catch (Exception e)
 			{
@@ -280,14 +314,14 @@ namespace PoEDlgExplorer
 
 			bool audioEnabled = Settings.Instance.PlayAudio;
 
-			var nodeStack = new Stack<int>();
-			nodeStack.Push(0);
-			LoadNode(conversation, nodeStack.Peek(), audioEnabled);
+			var linkStack = new Stack<ConversationLink>();
+			linkStack.Push(new ConversationLink(conversation, -1, 0));
+			PrintNode(linkStack.Peek(), audioEnabled);
 
 			Command command;
 			do
 			{
-				FlowChartNode node = conversation.FindNode(nodeStack.Peek());
+				FlowChartNode node = conversation.FindNode(linkStack.Peek().Link.ToNodeID);
 				int pickedLine;
 				command = ReadInput(node.Links.Count, out pickedLine);
 
@@ -298,22 +332,49 @@ namespace PoEDlgExplorer
 						Console.Clear();
 
 						FlowChartLink link = node.Links[pickedLine - 1];
-						nodeStack.Push(link.ToNodeID);
+						linkStack.Push(new ConversationLink(conversation, link));
 
-						LoadNode(conversation, nodeStack.Peek(), audioEnabled);
+						FlowChartNode targetNode = conversation.FindNode(link.ToNodeID);
+						if (targetNode is PlayerResponseNode && targetNode.Links.Count == 1)
+						{
+							// skip player response nodes
+							linkStack.Pop();
+							linkStack.Push(new ConversationLink(conversation, targetNode.Links[0]));
+						}
+
+						PrintNode(linkStack.Peek(), audioEnabled);
 						break;
+
 					case Command.Rewind:
-						if (nodeStack.Count > 1)
+						if (linkStack.Count > 1)
 						{
 							AudioServer.Stop();
 							Console.Clear();
 
-							nodeStack.Pop();
-							LoadNode(conversation, nodeStack.Peek(), false);
+							linkStack.Pop();
+							conversation = linkStack.Peek().Conversation;
+							PrintNode(linkStack.Peek(), false);
 						}
 						break;
+
+					case Command.Confirm:
+						var triggerNode = node as TriggerConversationNode;
+						if (triggerNode != null)
+						{
+							AudioServer.Stop();
+							Console.Clear();
+
+							string conversationTag = Path.GetFileNameWithoutExtension(triggerNode.ConversationFilename);
+							conversation = LoadConversation(conversationTag, Settings.Instance.Localization);
+
+							linkStack.Push(new ConversationLink(conversation, -1, triggerNode.StartNodeID));
+							PrintNode(linkStack.Peek(), audioEnabled);
+						}
+						break;
+
 					case Command.QuitProgram:
 						break;
+
 					case Command.ToggleAudio:
 						if (audioEnabled)
 						{
@@ -328,6 +389,7 @@ namespace PoEDlgExplorer
 								AudioServer.Play(audioFile);
 						}
 						break;
+
 					default:
 						throw new ArgumentOutOfRangeException();
 				}
