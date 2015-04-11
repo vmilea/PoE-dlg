@@ -16,70 +16,36 @@
 
 using System;
 using System.Collections.Generic;
-using System.Xml.Linq;
+using System.Linq;
+using PoEDlgExplorer.XmlModel;
 
 namespace PoEDlgExplorer
 {
-	public class Conversation
+	public sealed class Conversation
 	{
 		public readonly string Tag;
+		public readonly ConversationData Data;
+		public readonly StringTable StringTable;
 
-		private readonly IDictionary<int, FlowChartNode> _nodes;
-		private readonly IDictionary<int, StringTableEntry> _stringTable;
+		public IDictionary<int, FlowChartNode> Nodes { get { return Data.NodeMap; } }
 
-		public int NodeCount { get { return _nodes.Count; } }
+		public IDictionary<int, StringTable.Entry> Text { get { return StringTable.EntryMap; } }
 
-		public Conversation(string tag, XElement xConversation, XElement xStringTable)
+		public Conversation(string tag, ConversationData conversationData, StringTable stringTable)
 		{
 			Tag = tag;
-			_stringTable = ParseStringTable(xStringTable);
-
-			_nodes = new Dictionary<int, FlowChartNode>();
-			foreach (var xNode in xConversation.Element("Nodes").Elements())
-			{
-				var node = new FlowChartNode(xNode);
-				_nodes[node.Id] = node;
-			}
+			Data = conversationData;
+			StringTable = stringTable;
 		}
 
-		public FlowChartNode GetStartNode()
+		public FlowChartNode FindNode(int nodeId)
 		{
-			return _nodes[0];
+			return (Nodes.ContainsKey(nodeId) ? Nodes[nodeId] : null);
 		}
 
-		public FlowChartNode GetNode(int nodeId)
+		public StringTable.Entry FindText(int nodeId)
 		{
-			return _nodes[nodeId];
-		}
-
-		public bool HasStringEntry(int nodeId)
-		{
-			return _stringTable.ContainsKey(nodeId);
-		}
-
-		public StringTableEntry GetStringEntry(int nodeId)
-		{
-			return _stringTable[nodeId];
-		}
-
-		private static IDictionary<int, StringTableEntry> ParseStringTable(XElement xStringTable)
-		{
-			var entries = new Dictionary<int, StringTableEntry>();
-
-			foreach (var entry in xStringTable.Elements("Entries").Elements())
-			{
-				int id = entry.IntElement("ID").Value;
-				string defaultText = entry.Element("DefaultText").Value;
-				string femaleText = entry.Element("FemaleText").Value;
-
-				if (entries.ContainsKey(id))
-					throw new ArgumentException("String entry ID is not unique");
-
-				entries[id] = new StringTableEntry(id, defaultText,
-					(femaleText.Length == 0 ? null : femaleText));
-			}
-
-			return entries;
+			return (Text.ContainsKey(nodeId) ? Text[nodeId] : null);
 		}
 	}
 }

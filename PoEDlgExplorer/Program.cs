@@ -18,7 +18,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Xml.Linq;
+using PoEDlgExplorer.XmlModel;
 
 namespace PoEDlgExplorer
 {
@@ -122,8 +122,10 @@ namespace PoEDlgExplorer
 			if (stringTableFile == null)
 				throw new ArgumentException("String table file not found for conversation " + tag + " (" + localization + ")");
 
-			return new Conversation(tag,
-				XElement.Load(conversationFile.FullName), XElement.Load(stringTableFile.FullName));
+			var conversationData = Xml.Deserialize<ConversationData>(conversationFile.FullName);
+			var stringTable = Xml.Deserialize<StringTable>(stringTableFile.FullName);
+
+			return new Conversation(tag, conversationData, stringTable);
 		}
 
 		private static void PrintNodeInfo(FlowChartNode node, int indendation)
@@ -131,52 +133,55 @@ namespace PoEDlgExplorer
 			var space = new string(' ', indendation);
 
 			Console.WriteLine("{0}{1}", space, node.GetBrief());
-			foreach (var script in node.GetOnEnterScripts())
-				Console.WriteLine("{0}  on enter  : {1}", space, script);
-			foreach (var script in node.GetOnExitScripts())
-				Console.WriteLine("{0}  on exit   : {1}", space, script);
-			foreach (var script in node.GetOnUpdateScripts())
-				Console.WriteLine("{0}  on update : {1}", space, script);
+			foreach (var script in node.OnEnterScripts)
+				Console.WriteLine("{0}  on enter  : {1}", space, script.Format());
+			foreach (var script in node.OnExitScripts)
+				Console.WriteLine("{0}  on exit   : {1}", space, script.Format());
+			foreach (var script in node.OnUpdateScripts)
+				Console.WriteLine("{0}  on update : {1}", space, script.Format());
 		}
 
 		private static void LoadNode(Conversation conversation, int nodeId, bool playAudio)
 		{
-			FlowChartNode node = conversation.GetNode(nodeId);
-			Console.WriteLine("[node-{0:00}]", node.Id);
+			FlowChartNode node = conversation.FindNode(nodeId);
+			Console.WriteLine("[node-{0:00}]", node.NodeID);
 
 			FileInfo audioFile = ResourceLocator.FindVocalization(conversation.Tag, nodeId);
 			if (audioFile != null)
-				Console.WriteLine("[vocalized]");
+				Console.WriteLine("[audio]");
 
-			StringTableEntry text;
-			if (conversation.HasStringEntry(nodeId))
+			StringTable.Entry text = conversation.FindText(node.NodeID);
+			if (text != null)
 			{
-				Console.WriteLine();
-				text = conversation.GetStringEntry(node.Id);
 				Console.ForegroundColor = ConsoleColor.White;
-				Console.WriteLine("{0}", text.Format());
+				Console.WriteLine("\n{0}", text.Format());
 				Console.ForegroundColor = ConsoleColor.Gray;
 			}
 			Console.WriteLine("\n\n");
 
-			if (node.LinkCount == 0)
+			if (node.Links.Count == 0)
 			{
 				Console.WriteLine("(End. Hit BACKSPACE to rewind)");
 			}
 			else
 			{
-				for (int i = 0; i < node.LinkCount; i++)
+				for (int i = 0; i < node.Links.Count; i++)
 				{
-					DialogueLink link = node.GetLink(i);
-					text = conversation.GetStringEntry(link.TargetId);
+					FlowChartLink link = node.Links[i];
+					text = conversation.FindText(link.ToNodeID);
 
 					Console.Write("({0}) {1} ", i + 1, link.GetBrief());
 
-					PrintNodeInfo(conversation.GetNode(link.TargetId), 0);
+					if (ResourceLocator.FindVocalization(conversation.Tag, link.ToNodeID) != null)
+						Console.Write("[audio] ");
 
-					Console.ForegroundColor = ConsoleColor.White;
-					Console.WriteLine("{0}\n\n", text.Format());
-					Console.ForegroundColor = ConsoleColor.Gray;
+					PrintNodeInfo(conversation.FindNode(link.ToNodeID), 0);
+
+					if (!link.PointsToGhost)
+						Console.ForegroundColor = ConsoleColor.White;
+					Console.WriteLine("{0}\n\n", (node.Links.Count == 1 ? "[continue]" : text.Format()));
+					if (!link.PointsToGhost)
+						Console.ForegroundColor = ConsoleColor.Gray;
 				}
 			}
 
@@ -222,8 +227,6 @@ namespace PoEDlgExplorer
 
 		static void Main(string[] args)
 		{
-			Settings.Load();
-
 			//if (args.Length == 0)
 			//	args = new string[]
 			//	{
@@ -235,7 +238,7 @@ namespace PoEDlgExplorer
 				if (args.Length > 0)
 					ResourceLocator.Initialize(args[0]);
 				else
-					ResourceLocator.Initialize(Settings.GetString("poe_path"));
+					ResourceLocator.Initialize(Settings.Instance.GamePath);
 			}
 			catch (Exception e)
 			{
@@ -265,7 +268,7 @@ namespace PoEDlgExplorer
 			Conversation conversation;
 			try
 			{
-				string localization = Settings.GetString("localization");
+				string localization = Settings.Instance.Localization;
 				conversation = LoadConversationByPath(new FileInfo(args[0]), localization);
 			}
 			catch (Exception e)
@@ -275,49 +278,52 @@ namespace PoEDlgExplorer
 				return;
 			}
 
-			bool playAudio = Settings.GetBool("play_audio");
+			bool audioEnabled = Settings.Instance.PlayAudio;
 
 			var nodeStack = new Stack<int>();
 			nodeStack.Push(0);
-			LoadNode(conversation, nodeStack.Peek(), playAudio);
+			LoadNode(conversation, nodeStack.Peek(), audioEnabled);
 
 			Command command;
 			do
 			{
-				FlowChartNode node = conversation.GetNode(nodeStack.Peek());
+				FlowChartNode node = conversation.FindNode(nodeStack.Peek());
 				int pickedLine;
-				command = ReadInput(node.LinkCount, out pickedLine);
+				command = ReadInput(node.Links.Count, out pickedLine);
 
 				switch (command)
 				{
 					case Command.PickLine:
-						DialogueLink link = node.GetLink(pickedLine - 1);
-						nodeStack.Push(link.TargetId);
 						AudioServer.Stop();
 						Console.Clear();
-						LoadNode(conversation, nodeStack.Peek(), playAudio);
+
+						FlowChartLink link = node.Links[pickedLine - 1];
+						nodeStack.Push(link.ToNodeID);
+
+						LoadNode(conversation, nodeStack.Peek(), audioEnabled);
 						break;
 					case Command.Rewind:
 						if (nodeStack.Count > 1)
 						{
-							nodeStack.Pop();
 							AudioServer.Stop();
 							Console.Clear();
+
+							nodeStack.Pop();
 							LoadNode(conversation, nodeStack.Peek(), false);
 						}
 						break;
 					case Command.QuitProgram:
 						break;
 					case Command.ToggleAudio:
-						if (playAudio)
+						if (audioEnabled)
 						{
-							playAudio = false;
+							audioEnabled = false;
 							AudioServer.Stop();
 						}
 						else
 						{
-							playAudio = true;
-							FileInfo audioFile = ResourceLocator.FindVocalization(conversation.Tag, node.Id);
+							audioEnabled = true;
+							FileInfo audioFile = ResourceLocator.FindVocalization(conversation.Tag, node.NodeID);
 							if (audioFile != null)
 								AudioServer.Play(audioFile);
 						}

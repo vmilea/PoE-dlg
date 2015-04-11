@@ -14,27 +14,31 @@
  * limitations under the License.
  ******************************************************************************/
 
-namespace PoEDlgExplorer
+using System;
+using System.Collections.Generic;
+
+namespace PoEDlgExplorer.XmlModel
 {
-	public struct StringTableEntry
+	public enum ConversationType
 	{
-		public readonly int Id;
-		public readonly string DefaultText;
-		public readonly string FemaleText;
+		Conversation,
+		Chatter
+	}
 
-		public StringTableEntry(int id, string defaultText, string femaleText = null)
-		{
-			Id = id;
-			DefaultText = defaultText;
-			FemaleText = femaleText;
-		}
+	[Serializable]
+	public struct CharacterMapping
+	{
+		public Guid Guid;
+		public string InstanceTag;
+	}
 
-		public string Format()
-		{
-			if (FemaleText == null)
-				return DefaultText;
-			else
-				return string.Format("{0} / fem: {1}", DefaultText, FemaleText);
-		}
+	[Serializable]
+	public class ConversationData : FlowChartData
+	{
+		public ConversationType CoversationType;
+		public string Description;
+		public string SceneLocation;
+		public string SceneTime;
+		public List<CharacterMapping> CharacterMappings;
 	}
 }

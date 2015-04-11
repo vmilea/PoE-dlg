@@ -39,14 +39,19 @@
     <Compile Include="AudioServer.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="CompOp.cs" />
+    <Compile Include="XmlModel\ComparisonOperator.cs" />
     <Compile Include="Conversation.cs" />
-    <Compile Include="DialogueLink.cs" />
-    <Compile Include="FlowChartNode.cs" />
     <Compile Include="ResourceLocator.cs" />
-    <Compile Include="StringTable.cs" />
+    <Compile Include="XmlModel\StringTable.cs" />
     <Compile Include="XmlEx.cs" />
     <Compile Include="Settings.cs" />
+    <Compile Include="XmlModel\BankNode.cs" />
+    <Compile Include="XmlModel\ConversationData.cs" />
+    <Compile Include="XmlModel\DialogueNode.cs" />
+    <Compile Include="XmlModel\Expression.cs" />
+    <Compile Include="XmlModel\FlowChartData.cs" />
+    <Compile Include="XmlModel\FlowChartNode.cs" />
+    <Compile Include="XmlModel\ScriptCall.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Settings.xml">

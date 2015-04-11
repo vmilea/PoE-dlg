@@ -14,39 +14,32 @@
  * limitations under the License.
  ******************************************************************************/
 
+using System.IO;
 using System.Xml.Linq;
+using System.Xml.Serialization;
 
 namespace PoEDlgExplorer
 {
-	public static class Misc
+	public static class Xml
 	{
 		public static readonly XNamespace XsiNs = "http://www.w3.org/2001/XMLSchema-instance";
-	}
 
-	public static class XElementEx
-	{
-		public static int? IntElement(this XElement xElement, string name)
+		public static T Deserialize<T>(string path)
 		{
-			var x = xElement.Element(name);
-			return x == null ? (int?)null : int.Parse(x.Value);
+			using (var reader = new StreamReader(path))
+			{
+				var serializer = new XmlSerializer(typeof(T));
+				return (T)serializer.Deserialize(reader);
+			}
 		}
 
-		public static int? IntAttribute(this XElement xElement, string name)
+		public static void Serialize<T>(string path, T o)
 		{
-			var x = xElement.Attribute(name);
-			return x == null ? (int?)null : int.Parse(x.Value);
-		}
-
-		public static bool? BoolElement(this XElement xElement, string name)
-		{
-			var x = xElement.Element(name);
-			return x == null ? (bool?)null : bool.Parse(x.Value);
-		}
-
-		public static bool? BoolAttribute(this XElement xElement, string name)
-		{
-			var x = xElement.Attribute(name);
-			return x == null ? (bool?)null : bool.Parse(x.Value);
+			using (var writer = new StreamWriter(path))
+			{
+				var serializer = new XmlSerializer(typeof(T));
+				serializer.Serialize(writer, o);
+			}
 		}
 	}
 }

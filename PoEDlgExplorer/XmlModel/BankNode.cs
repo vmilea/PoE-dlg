@@ -15,39 +15,28 @@
  ******************************************************************************/
 
 using System;
-using System.IO;
-using System.Reflection;
+using System.Collections.Generic;
+using System.Text;
 
-namespace PoEDlgExplorer
+namespace PoEDlgExplorer.XmlModel
 {
-	[Serializable]
-	public sealed class Settings
+	public enum BankNodePlayType
 	{
-		public string GamePath;
-		public string Localization;
-		public bool PlayAudio;
+		PlayFirst,
+		PlayAll,
+		PlayRandom
+	}
 
-		private static Settings _instance;
+	[Serializable]
+	public class BankNode : FlowChartNode
+	{
+		public BankNodePlayType BankNodePlayType;
+		public List<int> ChildNodeIDs;
 
-		public static Settings Instance
+		protected override void ExtendBrief(StringBuilder sb)
 		{
-			get { return _instance ?? (_instance = Xml.Deserialize<Settings>(FilePath)); }
-		}
-
-		public void Save()
-		{
-			Xml.Serialize(FilePath, this);
-		}
-
-		private Settings() { }
-
-		private static string FilePath
-		{
-			get
-			{
-				string dirUri = Path.GetDirectoryName(Assembly.GetExecutingAssembly().CodeBase);
-				return new Uri(dirUri).LocalPath + @"\Settings.xml";
-			}
+			sb.Append(BankNodePlayType).Append(" ");
+			sb.Append(ChildNodeIDs.Count).Append("-children ");
 		}
 	}
 }

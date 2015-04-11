@@ -1,6 +1,6 @@
-<?xml version="1.0" encoding="utf-8" ?>
-<Settings>
-	<Entry key="localization" value="en"/>
-	<Entry key="poe_path" value="c:\\Games\\Pillars of Eternity\\"/>
-	<Entry key="play_audio" value="true"/>
+<?xml version="1.0" encoding="utf-8"?>
+<Settings xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+	<GamePath>c:\Games\Pillars of Eternity\</GamePath>
+	<Localization>en</Localization>
+	<PlayAudio>true</PlayAudio>
 </Settings>
