@@ -16,6 +16,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 
 namespace PoEDlgExplorer.XmlModel
@@ -119,8 +120,9 @@ namespace PoEDlgExplorer.XmlModel
 		{
 			base.ExtendBrief(sb);
 
+			string tag = Path.GetFileNameWithoutExtension(ConversationFilename);
 			sb.Append("node-").Append(StartNodeID)
-				.Append("-").Append(ConversationFilename).Append(" ");
+				.Append(" ").Append(tag).Append(" ");
 		}
 	}
 

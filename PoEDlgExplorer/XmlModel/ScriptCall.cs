@@ -45,23 +45,17 @@ namespace PoEDlgExplorer.XmlModel
 			switch (FunctionName)
 			{
 				case "SetGlobalValue":
-					if (Parameters.Count != 2)
-						throw new ArgumentException("SetGlobalValue takes 2 arguments");
-
+					CheckParameterCount(2);
 					result = Parameters[0] + " = " + Parameters[1];
 					break;
 
 				case "IncrementGlobalValue":
-					if (Parameters.Count != 2)
-						throw new ArgumentException("IncrementGlobalValue takes 2 arguments");
-
+					CheckParameterCount(2);
 					result = Parameters[0] + " += " + Parameters[1];
 					break;
 
 				case "DispositionAddPoints":
-					if (Parameters.Count != 2)
-						throw new ArgumentException("DispositionAddPoints takes 2 arguments");
-
+					CheckParameterCount(2);
 					result = Parameters[0] + " += " + Parameters[1];
 					break;
 
@@ -82,9 +76,8 @@ namespace PoEDlgExplorer.XmlModel
 			switch (FunctionName)
 			{
 				case "IsGlobalValue":
-					if (Parameters.Count != 3)
-						throw new ArgumentException("IsGlobalValue takes 3 arguments");
-
+				case "CompareGlobals":
+					CheckParameterCount(3);
 					comparisonOperator = (ComparisonOperator)Enum.Parse(typeof(ComparisonOperator), Parameters[1]);
 					if (negate)
 					{
@@ -108,24 +101,18 @@ namespace PoEDlgExplorer.XmlModel
 					break;
 
 				case "IsPlayerAttributeScoreValue":
-					if (Parameters.Count != 3)
-						throw new ArgumentException("IsPlayerAttributeScoreValue takes 3 arguments");
-
+					CheckParameterCount(3);
 					comparisonOperator = (ComparisonOperator)Enum.Parse(typeof(ComparisonOperator), Parameters[1]);
 					result = Parameters[0] + " " + comparisonOperator.ToMathOp() + " " + Parameters[2];
 					break;
 
 				case "IsPlayerBackground":
-					if (Parameters.Count != 1)
-						throw new ArgumentException("IsPlayerBackground takes 1 argument");
-
+					CheckParameterCount(1);
 					result = Parameters[0];
 					break;
 
 				case "ReputationTagRankGreater":
-					if (Parameters.Count != 3)
-						throw new ArgumentException("ReputationTagRankGreater takes 3 arguments");
-
+					CheckParameterCount(3);
 					if (Parameters[1] == "Positive" || Parameters[1].Length == 0)
 						result = "Rep(" + Parameters[0] + " > " + Parameters[2] + ")";
 					else if (Parameters[1] == "Negative")
@@ -135,9 +122,7 @@ namespace PoEDlgExplorer.XmlModel
 					break;
 
 				case "HasConversationNodeBeenPlayed":
-					if (Parameters.Count != 2)
-						throw new ArgumentException("HasConversationNodeBeenPlayed takes 2 arguments");
-
+					CheckParameterCount(2);
 					result = "NodePlayed(" + FilterFunctionArgument(Parameters[0]) + ", " + Parameters[1] + ")";
 					break;
 
@@ -154,6 +139,12 @@ namespace PoEDlgExplorer.XmlModel
 					result = "!" + result;
 			}
 			return result;
+		}
+
+		private void CheckParameterCount(int expectedParameters)
+		{
+			if (Parameters.Count != expectedParameters)
+				throw new ArgumentException(FunctionName + " takes " + expectedParameters + " arguments");
 		}
 
 		private string FormatFunction()

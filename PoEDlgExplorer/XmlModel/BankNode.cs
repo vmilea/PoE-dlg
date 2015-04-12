@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Xml.Serialization;
 
 namespace PoEDlgExplorer.XmlModel
 {
@@ -32,6 +33,12 @@ namespace PoEDlgExplorer.XmlModel
 	{
 		public BankNodePlayType BankNodePlayType;
 		public List<int> ChildNodeIDs;
+
+		[XmlIgnore]
+		public override IReadOnlyList<int> ChildIDs
+		{
+			get { return ChildNodeIDs; }
+		}
 
 		protected override void ExtendBrief(StringBuilder sb)
 		{

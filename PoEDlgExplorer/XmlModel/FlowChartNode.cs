@@ -41,13 +41,26 @@ namespace PoEDlgExplorer.XmlModel
 		public List<ScriptCall> OnUpdateScripts;
 
 		[XmlIgnore]
-		public bool IsRoot { get { return NodeID == 0; } }
+		public bool IsRoot
+		{
+			get { return NodeID == 0; }
+		}
+
+		[XmlIgnore]
+		public virtual IReadOnlyList<int> ChildIDs
+		{
+			get { return new List<int>(); }
+		}
 
 		public string GetBrief()
 		{
 			var sb = new StringBuilder();
 
 			sb.Append(string.Format("[ node-{0:00} ", NodeID));
+
+			if (ContainerNodeID != -1)
+				sb.Append("container-").Append(ContainerNodeID).Append(" ");
+
 			ExtendBrief(sb);
 			sb.Append("]");
 
@@ -65,6 +78,16 @@ namespace PoEDlgExplorer.XmlModel
 		public int FromNodeID;
 		public int ToNodeID;
 		public bool PointsToGhost;
+
+		public FlowChartLink()
+		{
+		}
+
+		public FlowChartLink(int fromNodeID, int toNodeID)
+		{
+			FromNodeID = fromNodeID;
+			ToNodeID = toNodeID;
+		}
 
 		public string GetBrief()
 		{

@@ -34,10 +34,28 @@ namespace PoEDlgExplorer
 			QuitProgram,
 		}
 
-		private static Command ReadInput(int numDialogueLines, out int pickedLine)
+		private struct ConversationLink
+		{
+			public readonly Conversation Conversation;
+			public readonly FlowChartLink Link;
+
+			public ConversationLink(Conversation conversation, FlowChartLink link)
+			{
+				Conversation = conversation;
+				Link = link;
+			}
+
+			public ConversationLink(Conversation conversation, int fromNodeID, int toNodeID)
+				: this(conversation, new FlowChartLink(fromNodeID, toNodeID))
+			{
+			}
+		}
+
+		private static Command ReadInput(FlowChartNode node, out FlowChartLink pickedLink)
 		{
 			int accumulator = 0;
-			pickedLine = 0;
+			int pickedLine = -1;
+			int numDialogueLines = node.Links.Count + node.ChildIDs.Count;
 
 			Command command = Command.None;
 			do
@@ -69,7 +87,7 @@ namespace PoEDlgExplorer
 
 					if (1 <= accumulator && accumulator <= numDialogueLines)
 					{
-						pickedLine = accumulator;
+						pickedLine = accumulator - 1;
 						command = Command.PickLine;
 					}
 					else
@@ -94,7 +112,7 @@ namespace PoEDlgExplorer
 						// pick dialogue line number if unambiguous
 						if (10 * accumulator > numDialogueLines)
 						{
-							pickedLine = accumulator;
+							pickedLine = accumulator - 1;
 							command = Command.PickLine;
 						}
 					}
@@ -104,6 +122,11 @@ namespace PoEDlgExplorer
 					command = Command.ToggleAudio;
 				}
 			} while (command == Command.None);
+
+			if (pickedLine < node.Links.Count)
+				pickedLink = (pickedLine == -1 ? null : node.Links[pickedLine]);
+			else
+				pickedLink = new FlowChartLink(node.NodeID, node.ChildIDs[pickedLine - node.Links.Count]);
 
 			return command;
 		}
@@ -158,22 +181,39 @@ namespace PoEDlgExplorer
 			}
 			Console.WriteLine("\n\n");
 
-			if (node.Links.Count == 0)
+			if (node.Links.Count + node.ChildIDs.Count == 0)
 			{
 				if (node is TriggerConversationNode)
 					Console.WriteLine("(End. Hit BACKSPACE to rewind or ENTER to load target conversation)");
+				else if (node.ContainerNodeID != -1)
+					Console.WriteLine("(Hit BACKSPACE to rewind into container node)");
 				else
 					Console.WriteLine("(End. Hit BACKSPACE to rewind)");
 			}
 			else
 			{
-				for (int i = 0; i < node.Links.Count; i++)
+				for (int i = 0; i < node.Links.Count + node.ChildIDs.Count; i++)
 				{
-					FlowChartLink link = node.Links[i];
-					FlowChartNode targetNode = conversation.FindNode(link.ToNodeID);
-					text = conversation.FindText(link.ToNodeID);
+					FlowChartNode targetNode;
+					bool pointsToGhost = false;
 
-					Console.WriteLine("({0}) {1} -> {2}", i + 1, link.GetBrief(), targetNode.GetBrief());
+					if (i < node.Links.Count)
+					{
+						FlowChartLink link = node.Links[i];
+						pointsToGhost = link.PointsToGhost;
+						targetNode = conversation.FindNode(link.ToNodeID);
+						Console.Write("({0}) {1} -> {2}", i + 1, link.GetBrief(), targetNode.GetBrief());
+					}
+					else
+					{
+						targetNode = conversation.FindNode(node.ChildIDs[i - node.Links.Count]);
+						Console.Write("({0}) [ child ] -> {1}", i + 1, targetNode.GetBrief());
+					}
+
+					if (targetNode is PlayerResponseNode && targetNode.Links.Count == 1)
+						Console.WriteLine(" -> {0}", conversation.FindNode(targetNode.Links[0].ToNodeID).GetBrief());
+					else
+						Console.WriteLine();
 
 					string condition = targetNode.Conditionals.Format();
 					if (condition.Length > 0)
@@ -185,19 +225,20 @@ namespace PoEDlgExplorer
 					foreach (var script in targetNode.OnUpdateScripts)
 						Console.WriteLine("  on update : {0}", script.Format());
 
-					if (!link.PointsToGhost)
+					if (!pointsToGhost)
 						Console.ForegroundColor = ConsoleColor.White;
-					if (node.Links.Count == 1)
+					if (node.Links.Count + node.ChildIDs.Count == 1)
 					{
 						Console.WriteLine("[continue]");
 					}
 					else
 					{
-						if (ResourceLocator.FindVocalization(conversation.Tag, link.ToNodeID) != null)
+						if (ResourceLocator.FindVocalization(conversation.Tag, targetNode.NodeID) != null)
 							Console.Write("[audio] ");
+						text = conversation.FindText(targetNode.NodeID);
 						Console.WriteLine(text.Format());
 					}
-					if (!link.PointsToGhost)
+					if (!pointsToGhost)
 						Console.ForegroundColor = ConsoleColor.Gray;
 					Console.WriteLine("\n");
 				}
@@ -241,23 +282,6 @@ namespace PoEDlgExplorer
 			Console.WriteLine("files without stringtable: {0}", missingFileCount);
 			Console.WriteLine("unparsable files: {0}", unparsableFileCount);
 			Console.WriteLine();
-		}
-
-		struct ConversationLink
-		{
-			public readonly Conversation Conversation;
-			public readonly FlowChartLink Link;
-
-			public ConversationLink(Conversation conversation, FlowChartLink link)
-			{
-				Conversation = conversation;
-				Link = link;
-			}
-
-			public ConversationLink(Conversation conversation, int fromNodeID, int toNodeID)
-				: this(conversation, new FlowChartLink() { FromNodeID = fromNodeID, ToNodeID = toNodeID })
-			{
-			}
 		}
 
 		static void Main(string[] args)
@@ -322,8 +346,8 @@ namespace PoEDlgExplorer
 			do
 			{
 				FlowChartNode node = conversation.FindNode(linkStack.Peek().Link.ToNodeID);
-				int pickedLine;
-				command = ReadInput(node.Links.Count, out pickedLine);
+				FlowChartLink pickedLink;
+				command = ReadInput(node, out pickedLink);
 
 				switch (command)
 				{
@@ -331,10 +355,9 @@ namespace PoEDlgExplorer
 						AudioServer.Stop();
 						Console.Clear();
 
-						FlowChartLink link = node.Links[pickedLine - 1];
-						linkStack.Push(new ConversationLink(conversation, link));
+						linkStack.Push(new ConversationLink(conversation, pickedLink));
 
-						FlowChartNode targetNode = conversation.FindNode(link.ToNodeID);
+						FlowChartNode targetNode = conversation.FindNode(pickedLink.ToNodeID);
 						if (targetNode is PlayerResponseNode && targetNode.Links.Count == 1)
 						{
 							// skip player response nodes
@@ -364,8 +387,9 @@ namespace PoEDlgExplorer
 							AudioServer.Stop();
 							Console.Clear();
 
-							string conversationTag = Path.GetFileNameWithoutExtension(triggerNode.ConversationFilename);
-							conversation = LoadConversation(conversationTag, Settings.Instance.Localization);
+							string tag = Path.GetFileNameWithoutExtension(triggerNode.ConversationFilename);
+							if (tag != conversation.Tag)
+								conversation = LoadConversation(tag, Settings.Instance.Localization);
 
 							linkStack.Push(new ConversationLink(conversation, -1, triggerNode.StartNodeID));
 							PrintNode(linkStack.Peek(), audioEnabled);
