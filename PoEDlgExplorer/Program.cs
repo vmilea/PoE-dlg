@@ -391,7 +391,13 @@ namespace PoEDlgExplorer
 							if (tag != conversation.Tag)
 								conversation = LoadConversation(tag, Settings.Instance.Localization);
 
-							linkStack.Push(new ConversationLink(conversation, -1, triggerNode.StartNodeID));
+							int startNodeID = triggerNode.StartNodeID;
+							if (!conversation.Nodes.ContainsKey(startNodeID))
+							{
+								Console.Error.WriteLine("Invalid start node!");
+								startNodeID = 0;
+							}
+							linkStack.Push(new ConversationLink(conversation, -1, startNodeID));
 							PrintNode(linkStack.Peek(), audioEnabled);
 						}
 						break;
